@@ -11,7 +11,16 @@ db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS ventas (id INTEGER PRIMARY KEY, cliente_nombre TEXT, monto REAL, fecha DATETIME DEFAULT CURRENT_TIMESTAMP)");
 });
 
-fastify.get('/', (req, reply) => reply.sendFile('index.html'));
+// Ruta para sugerir mesa (Algoritmo de optimización de capacidad)
+fastify.get('/api/sugerir/:pax', async (req) => {
+  const pax = parseInt(req.params.pax);
+  return new Promise((r) => {
+    // Filtra mesas disponibles con capacidad >= pax y ordena por capacidad ascendente (la más pequeña que quepa)
+    db.get("SELECT * FROM mesas WHERE estado = 'disponible' AND capacidad >= ? ORDER BY capacidad ASC LIMIT 1", 
+    [pax], (err, row) => r(row || { error: "No hay mesas disponibles para ese grupo" }));
+  });
+});
+
 fastify.get('/api/mesas', async () => new Promise(r => db.all("SELECT * FROM mesas", [], (err, rows) => r(rows))));
 fastify.get('/api/ventas', async () => new Promise(r => db.all("SELECT * FROM ventas ORDER BY fecha DESC", [], (err, rows) => r(rows))));
 fastify.get('/api/ranking', async () => new Promise(r => db.all("SELECT cliente_nombre, SUM(monto) as total FROM ventas GROUP BY cliente_nombre ORDER BY total DESC LIMIT 5", [], (err, rows) => r(rows))));
