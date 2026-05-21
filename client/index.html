@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { background: #0b1a2e; color: white; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; background: #152539; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .card { background: #152539; padding: 20px; border-radius: 12px; border: 2px solid #2c3e50; }
+    .btn-group { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+    button { cursor: pointer; padding: 8px; border-radius: 4px; border: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Marisquería "La Concha" | RevPASH: $<span id="revpash">0.00</span></h1>
+    <div>
+      <input id="capacidad" type="number" placeholder="Capacidad">
+      <button onclick="agregarMesa()">+ Agregar Mesa</button>
+    </div>
+  </div>
+
+  <div class="grid" id="lista-mesas"></div>
+
+  <script>
+    async function cargarMesas() {
+      const res = await fetch('/api/mesas');
+      const mesas = await res.json();
+      
+      const totalConsumo = mesas.reduce((acc, m) => acc + (m.consumo || 0), 0);
+      const totalCapacidad = mesas.reduce((acc, m) => acc + m.capacidad, 0);
+      document.getElementById('revpash').innerText = totalCapacidad > 0 ? (totalConsumo / totalCapacidad).toFixed(2) : "0.00";
+
+      document.getElementById('lista-mesas').innerHTML = mesas.map(m => `
+        <div class="card" style="border-color: ${m.estado === 'apartada' ? '#f1c40f' : (m.estado === 'ocupada' ? '#e74c3c' : '#2c3e50')}">
+          <h3>Mesa ${m.id}</h3>
+          <p>Estado: <strong>${m.estado.toUpperCase()}</strong> | Consumo: $${m.consumo || 0}</p>
+          <div class="btn-group">
+            ${m.estado === 'disponible' ? 
+              `<button style="background:#2ecc71" onclick="actualizar(${m.id}, 'ocupada', 2, 0)">Ocupar</button>
+               <button style="background:#f1c40f" onclick="actualizar(${m.id}, 'apartada')">Apartar</button>` : ''}
+            
+            ${m.estado === 'apartada' ? 
+              `<button style="background:#2ecc71" onclick="actualizar(${m.id}, 'ocupada', 2, 0)">Ocupar Ahora</button>
+               <button style="background:#95a5a6" onclick="actualizar(${m.id}, 'disponible')">Cancelar Apartado</button>` : ''}
+
+            ${m.estado === 'ocupada' ? 
+              (m.consumo > 0 ? 
+                `<button style="background:#e74c3c" onclick="actualizar(${m.id}, 'limpieza', 0, ${m.consumo})">Finalizar</button>` :
+                `<button style="background:#3498db" onclick="cobrar(${m.id})">Cobrar Cuenta</button>`
+              ) : ''}
+            
+            ${m.estado === 'limpieza' ? 
+  `<button style="background:#95a5a6" onclick="actualizar(${m.id}, 'disponible', 0, 0)">Confirmar Limpieza</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function cobrar(id) {
+      const monto = prompt("Ingrese el total a cobrar ($):");
+      if (monto && !isNaN(monto)) {
+        await fetch(`/api/mesas/${id}`, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ estado: 'ocupada', pax: 0, consumo: parseFloat(monto) })
+        });
+        cargarMesas();
+      }
+    }
+
+    async function actualizar(id, estado, pax = 0, consumo = 0) {
+      // Si el estado es 'limpieza' o 'disponible', forzamos el consumo a 0
+      const consumoFinal = (estado === 'limpieza' || estado === 'disponible') ? 0 : consumo;
+      
+      await fetch(`/api/mesas/${id}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+          estado: estado, 
+          pax: pax, 
+          consumo: consumoFinal 
+        })
+      });
+      cargarMesas();
+    }
+
+    async function agregarMesa() {
+      const cap = document.getElementById('capacidad').value;
+      if (!cap) return;
+      await fetch('/api/mesas', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ capacidad: cap }) });
+      cargarMesas();
+    }
+    cargarMesas();
+  </script>
+</body>
+</html>
